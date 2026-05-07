@@ -1,0 +1,63 @@
+// Roofing lead MVP — Hour 1 schema (ERD-aligned).
+// Dedupe key: stable string for upsert in Hour 3 (e.g. normalized name + ZIP or phone + ZIP).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Contractor {
+  id                 String   @id @default(cuid())
+  dedupeKey          String   @unique
+  name               String
+  phone              String?
+  website            String?
+  address            String?
+  city               String?
+  state              String?
+  zipCode            String
+  certificationLevel String?
+  lastSeenAt         DateTime @default(now())
+
+  rawSources RawLeadSource[]
+  insights   LeadInsight[]
+
+  @@index([zipCode])
+  @@index([phone])
+}
+
+model RawLeadSource {
+  id           String   @id @default(cuid())
+  sourceName   String
+  sourceUrl    String
+  rawData      Json
+  scrapedAt    DateTime @default(now())
+  contractorId String?
+
+  contractor Contractor? @relation(fields: [contractorId], references: [id], onDelete: SetNull)
+
+  @@index([contractorId])
+  @@index([sourceName, scrapedAt])
+}
+
+model LeadInsight {
+  id                  String   @id @default(cuid())
+  contractorId        String
+  summary             String
+  companyType         String
+  priorityScore       Int
+  talkingPoints       Json
+  recommendedProducts Json
+  risks               Json
+  generatedAt         DateTime @default(now())
+  modelVersion        String?
+  promptVersion       String?
+
+  contractor Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+
+  @@index([contractorId, generatedAt])
+}
