@@ -10,6 +10,10 @@ Detailed checklist: [TODO.md](./TODO.md).
 - Prisma 5 + PostgreSQL
 - Dedupe: unique `dedupeKey` (seed/demo uses `seed:zip:slug:suffix`; Hour 3 will align with normalized scrape keys)
 
+## GAF raw payload (scheme A)
+
+`RawLeadSource.rawData` is one JSON document per scrape, with **four top-level sections** aligned to the public listing: `aboutUs`, `certification`, `contractorDetails`, `reviews`, plus optional `meta`. **Contractor** stays flat for search/API; ETL reads these blocks in Hour 3. TypeScript: [`src/types/gaf-raw-data.ts`](./src/types/gaf-raw-data.ts).
+
 ## Quick start
 
 1. **PostgreSQL** — either:

@@ -1,5 +1,8 @@
 // Roofing lead MVP — Hour 1 schema (ERD-aligned).
 // Dedupe key: stable string for upsert in Hour 3 (e.g. normalized name + ZIP or phone + ZIP).
+//
+// RawLeadSource.rawData — GAF “scheme A”: one row per scrape artifact; JSON mirrors public page sections:
+//   aboutUs, certification, contractorDetails, reviews (each arbitrary Json). See src/types/gaf-raw-data.ts.
 
 generator client {
   provider = "prisma-client-js"
@@ -9,6 +12,7 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
 
 model Contractor {
   id                 String   @id @default(cuid())
@@ -34,6 +38,7 @@ model RawLeadSource {
   id           String   @id @default(cuid())
   sourceName   String
   sourceUrl    String
+  /// GAF: { aboutUs, certification, contractorDetails, reviews } (+ optional meta). Types: src/types/gaf-raw-data.ts
   rawData      Json
   scrapedAt    DateTime @default(now())
   contractorId String?
