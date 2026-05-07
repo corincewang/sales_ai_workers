@@ -57,7 +57,7 @@ Detailed checklist: [TODO.md](./TODO.md).
 | Method | Path | Notes |
 |--------|------|--------|
 | `GET` | `/api/contractors` | Query: `zip`, `q` (case-insensitive name contains); read DB only |
-| `GET` | `/api/contractors/:id` | Single contractor |
+| `GET` | `/api/contractors/:id` | Single contractor; optional `?include=latestInsight` appends newest `LeadInsight` |
 | `POST` | `/api/contractors/:id/insights` | OpenAI insight + append `LeadInsight`; **201** `{ data }` or `{ error, code? }` |
 
 Errors (examples): `MISSING_OPENAI_KEY` **503**, `RATE_LIMIT` **429**, `TIMEOUT` **504**, `INVALID_MODEL_OUTPUT` / `OPENAI_ERROR` **502**.

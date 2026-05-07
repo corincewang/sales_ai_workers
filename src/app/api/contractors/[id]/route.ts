@@ -3,11 +3,25 @@ import { prisma } from "@/lib/prisma";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
+function parseInclude(raw: string | null): Set<string> {
+  if (!raw?.trim()) return new Set();
+  return new Set(
+    raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+}
+
 /**
  * GET /api/contractors/:id — single contractor from DB.
+ * Query: `include=latestInsight` — attach most recent `LeadInsight` (by `generatedAt`).
  */
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   const { id } = await context.params;
+  const { searchParams } = new URL(request.url);
+  const include = parseInclude(searchParams.get("include"));
+  const withLatestInsight = include.has("latestInsight");
 
   const contractor = await prisma.contractor.findUnique({
     where: { id },
@@ -30,5 +44,16 @@ export async function GET(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ data: contractor });
+  if (!withLatestInsight) {
+    return NextResponse.json({ data: contractor });
+  }
+
+  const latestInsight = await prisma.leadInsight.findFirst({
+    where: { contractorId: id },
+    orderBy: { generatedAt: "desc" },
+  });
+
+  return NextResponse.json({
+    data: { ...contractor, latestInsight },
+  });
 }
