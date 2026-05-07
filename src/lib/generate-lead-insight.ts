@@ -5,6 +5,12 @@ import {
   parseLeadInsightPayload,
 } from "@/lib/lead-insight-schema";
 
+/**
+ * Project-wide default for insight generation: good JSON fidelity, low cost/latency.
+ * Set `OPENAI_MODEL` to override (e.g. `gpt-4o` if you need stronger nuance on priority/risk).
+ */
+export const DEFAULT_INSIGHT_MODEL = "gpt-4o-mini" as const;
+
 /** Fields we send to the model — grounded facts only. */
 export type ContractorFacts = Pick<
   Contractor,
@@ -88,7 +94,7 @@ export async function generateLeadInsight(
   facts: ContractorFacts,
   options?: { promptVersion?: string; model?: string },
 ): Promise<GenerateLeadInsightResult> {
-  const model = options?.model ?? process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+  const model = options?.model ?? process.env.OPENAI_MODEL ?? DEFAULT_INSIGHT_MODEL;
   const promptVersion =
     options?.promptVersion ??
     process.env.INSIGHT_PROMPT_VERSION ??
@@ -109,7 +115,7 @@ export async function generateLeadInsight(
         { role: "user", content: factsToUserMessage(facts) },
       ],
       response_format: { type: "json_object" },
-      temperature: 0.35,
+      temperature: 0.3,
     });
     raw = completion.choices[0]?.message?.content ?? "";
   } catch (e) {

@@ -8,7 +8,7 @@ Detailed checklist: [TODO.md](./TODO.md).
 
 - Next.js 16, TypeScript, Tailwind
 - Prisma 5 + PostgreSQL
-- **Hour 2:** `openai`, `zod` (structured insights)
+- **Hour 2:** `openai`, `zod` (structured insights); default insight model **`gpt-4o-mini`** (`OPENAI_MODEL`)
 - Dedupe: unique `dedupeKey` (seed/demo uses `seed:zip:slug:suffix`; Hour 3 will align with normalized scrape keys)
 
 ## GAF raw payload (scheme A)
