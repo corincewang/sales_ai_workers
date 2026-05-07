@@ -19,6 +19,17 @@ Detailed checklist: [TODO.md](./TODO.md).
 
 Case study entry: `https://www.gaf.com/en-us/roofing-contractors/residential?distance=25`, ZIP **10013**. The finder is SPA-driven; **confirm list/detail URLs in your browser** (DevTools → Network → Fetch/XHR) after searching by ZIP. Many environments get **403** on raw `curl` (Akamai); **your laptop browser** is the reliable place to capture the real request template. Constants + checklist: [`src/lib/scrape/gaf-discovery.ts`](./src/lib/scrape/gaf-discovery.ts).
 
+**Compliance:** follow [GAF](https://www.gaf.com) **robots.txt** and terms; Coveo calls use **your own** short-lived bearer token (demo/local); keep rate limits modest (`GAF_SCRAPE_*`, `GAF_INSIGHT_DELAY_MS`).
+
+## Real data path (no seed required for demo)
+
+1. Set **`DATABASE_URL`**, **`GAF_COVEO_BEARER_TOKEN`** (and optional Coveo URL/org overrides per [.env.example](./.env.example)).
+2. **`npm run scrape:gaf`** — upserts contractors from the live list + append-only **`RawLeadSource`** rows.
+3. Optional: **`GAF_SCRAPE_GENERATE_INSIGHTS=1 npm run scrape:gaf`** — batch **`LeadInsight`** after scrape (sequential + delay).
+4. Or **`POST /api/admin/scrape`** with JSON e.g. `{ "generateInsights": true }` and header **`x-admin-scrape-secret`** when **`SCRAPE_ADMIN_SECRET`** is set (required in production; dev can omit both).
+
+**Data quality over time:** `lastSeenAt` updates on each upsert; raw rows are **append-only** for audit; re-scrapes **merge** non-empty fields only (empty scrape fields do not wipe DB). Insights default to **only missing** so re-runs stay cheap; set `onlyMissingInsights: false` on the admin body to force new rows per contractor.
+
 ## Quick start
 
 1. **PostgreSQL** — either:
@@ -37,13 +48,15 @@ Case study entry: `https://www.gaf.com/en-us/roofing-contractors/residential?dis
 
    Set **`DATABASE_URL`** for your Postgres user. For **Hour 2 insights**, set **`OPENAI_API_KEY`** (see [.env.example](./.env.example)). Optional: **`OPENAI_MODEL`**, **`INSIGHT_PROMPT_VERSION`** (defaults are applied in code when unset).
 
-3. **Migrate & seed**
+3. **Migrate** (then *either* demo seed *or* real Coveo data)
 
    ```bash
    npm install
    npx prisma migrate deploy
-   npm run db:seed
    ```
+
+   - **Demo / interview with fake + sample rows:** `npm run db:seed`
+   - **Only real GAF list data:** **do not** run `db:seed`. Continue with [Real data path](#real-data-path-no-seed-required-for-demo) (`npm run scrape:gaf` or `POST /api/admin/scrape`). If you already seeded and want a clean DB: `npx prisma migrate reset --skip-seed` then migrate + scrape again.
 
 4. **Run app**
 
@@ -63,6 +76,7 @@ Case study entry: `https://www.gaf.com/en-us/roofing-contractors/residential?dis
 | `GET` | `/api/contractors` | Query: `zip`, `q` (case-insensitive name contains); read DB only |
 | `GET` | `/api/contractors/:id` | Single contractor; optional `?include=latestInsight` appends newest `LeadInsight` |
 | `POST` | `/api/contractors/:id/insights` | OpenAI insight + append `LeadInsight`; **201** `{ data }` or `{ error, code? }` |
+| `POST` | `/api/admin/scrape` | Demo: Coveo scrape → upsert; body `{ pageSize?, generateInsights?, onlyMissingInsights?, insightDelayMs? }`; auth: `x-admin-scrape-secret` |
 
 Errors (examples): `MISSING_OPENAI_KEY` **503**, `RATE_LIMIT` **429**, `TIMEOUT` **504**, `INVALID_MODEL_OUTPUT` / `OPENAI_ERROR` **502**.
 
