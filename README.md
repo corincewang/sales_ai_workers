@@ -1,6 +1,6 @@
 # Roofing lead intelligence — MVP
 
-Hour 1: **Next.js (App Router) + PostgreSQL + Prisma** — structured contractors in DB, **read-only** JSON API. **GAF scraper** is Hour 3 (not in this repo step yet).
+**Next.js + PostgreSQL + Prisma** — contractors API, **AI insights** (`/dashboard`), **GAF scrape** (Hour 3 in progress). See [TODO.md](./TODO.md).
 
 Detailed checklist: [TODO.md](./TODO.md).
 
@@ -14,6 +14,10 @@ Detailed checklist: [TODO.md](./TODO.md).
 ## GAF raw payload (scheme A)
 
 `RawLeadSource.rawData` is one JSON document per scrape, with **four top-level sections** aligned to the public listing: `aboutUs`, `certification`, `contractorDetails`, `reviews`, plus optional `meta`. **Contractor** stays flat for search/API; ETL reads these blocks in Hour 3. TypeScript: [`src/types/gaf-raw-data.ts`](./src/types/gaf-raw-data.ts).
+
+## GAF discovery (Hour 3-1)
+
+Case study entry: `https://www.gaf.com/en-us/roofing-contractors/residential?distance=25`, ZIP **10013**. The finder is SPA-driven; **confirm list/detail URLs in your browser** (DevTools → Network → Fetch/XHR) after searching by ZIP. Many environments get **403** on raw `curl` (Akamai); **your laptop browser** is the reliable place to capture the real request template. Constants + checklist: [`src/lib/scrape/gaf-discovery.ts`](./src/lib/scrape/gaf-discovery.ts).
 
 ## Quick start
 
