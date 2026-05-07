@@ -49,8 +49,8 @@ Detailed checklist: [TODO.md](./TODO.md).
 
 5. **Smoke test**
 
+   - [Dashboard — list + generate insight](http://localhost:3000/dashboard) (needs `OPENAI_API_KEY`)
    - [http://localhost:3000/api/contractors?zip=10013](http://localhost:3000/api/contractors?zip=10013)
-   - [http://localhost:3000/api/contractors?zip=10013&q=roof](http://localhost:3000/api/contractors?zip=10013&q=roof)
 
 ## API
 

@@ -5,13 +5,15 @@ export default function Home() {
     <div className="min-h-screen bg-zinc-50 px-6 py-16 text-zinc-900 dark:bg-black dark:text-zinc-50">
       <main className="mx-auto max-w-2xl">
         <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-          Sales AI workers — Hour 1
+          Sales AI workers — MVP
         </p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">
-          Roofing lead API (read-only)
+          Roofing lead API + dashboard
         </h1>
         <p className="mt-4 leading-7 text-zinc-600 dark:text-zinc-400">
-          Contractors are served from PostgreSQL via Prisma. Scraper comes in Hour 3.
+          Contractors from PostgreSQL; AI insights via{" "}
+          <code className="rounded bg-zinc-200 px-1 dark:bg-zinc-800">POST …/insights</code>
+          . GAF scraper is Hour 3.
         </p>
         <ul className="mt-8 list-inside list-disc space-y-2 text-zinc-700 dark:text-zinc-300">
           <li>
@@ -33,12 +35,18 @@ export default function Home() {
             </code>
           </li>
         </ul>
-        <p className="mt-8">
+        <p className="mt-8 flex flex-wrap gap-4">
+          <Link
+            href="/dashboard"
+            className="text-sm font-medium text-emerald-700 underline-offset-4 hover:underline dark:text-emerald-400"
+          >
+            Open sales dashboard — ZIP 10013 default
+          </Link>
           <Link
             href="/api/contractors?zip=10013"
             className="text-sm font-medium text-blue-600 underline-offset-4 hover:underline dark:text-blue-400"
           >
-            Open sample JSON — ZIP 10013
+            Sample JSON — ZIP 10013
           </Link>
         </p>
       </main>
