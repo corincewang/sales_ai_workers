@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import type { InputJsonValue } from "@prisma/client/runtime/library";
 
 const prisma = new PrismaClient();
 
@@ -11,6 +12,110 @@ function dedupeKey(zip: string, name: string, suffix: string) {
     .slice(0, 48);
   return `seed:${zip}:${slug}:${suffix}`;
 }
+
+/**
+ * Real GAF listing URLs — raw JSON mirrors public page sections (scheme A).
+ * Content is summarized from the same public pages (business info is directory data).
+ */
+const GAF_PUBLIC_SEEDS: {
+  sourceUrl: string;
+  dedupeKey: string;
+  contractor: {
+    name: string;
+    phone: string;
+    website: string;
+    address: string;
+    city: string;
+    state: string;
+    zipCode: string;
+    certificationLevel: string;
+  };
+  rawData: Record<string, unknown>;
+}[] = [
+  {
+    sourceUrl:
+      "https://www.gaf.com/en-us/roofing-contractors/residential/usa/nj/elmwood-park/donnys-home-improvement-1139561",
+    dedupeKey: "gaf:1139561",
+    contractor: {
+      name: "Donny's Home Improvement",
+      phone: "(973) 333-6364",
+      website: "https://www.donnysroofing.com/",
+      address: "30 16th Ave",
+      city: "Elmwood Park",
+      state: "NJ",
+      zipCode: "07407",
+      certificationLevel: "GAF Master Elite",
+    },
+    rawData: {
+      aboutUs: {
+        headline: "About",
+        body:
+          "Established in 2002, Donny's Home Improvement is a home improvement company that has built a reputable name for quality workmanship and superior services. Licensed and insured, you can trust our highly skilled specialists will provide you with top-notch results and a worry-free experience. Based in the state of NJ, our locally owned and operated business will cater to your needs, giving you personalized care as our valued client. With us, you can rest assured that the job will be done with skill and precision. We are detail-oriented, responsible, honest, prompt and affordable. We also offer various roofing options to suit your budget and style preferences, including asphalt shingles, metal roofing, and rubber roofing. If you have a property in need of professional home improvement services, contact us today. We will provide a clear and timely estimate and get the job done quickly. Donny's Home Improvement is your reliable service in the state of New Jersey with affordable rates and discounts for qualified buyers and veterans. Call us today.",
+      },
+      certification: {
+        awards: ["President's Club Award"],
+        programs: ["GAF Master Elite®"],
+      },
+      contractorDetails: {
+        yearsInBusiness: "In business since 2002",
+        numberOfEmployees: "More than 5",
+        contractorId: "1139561",
+        stateLicenseNumber: "13VH12121100",
+      },
+      reviews: {
+        rating: 5,
+        count: 116,
+        summary: "Aggregate rating shown on directory; detailed list may load separately in browser.",
+      },
+      meta: {
+        gafContractorId: "1139561",
+        seedOrigin: "prisma-seed",
+        pageKind: "residential-contractor-detail",
+      },
+    },
+  },
+  {
+    sourceUrl:
+      "https://www.gaf.com/en-us/roofing-contractors/residential/usa/nj/florham-park/american-home-contractors-inc-1005149",
+    dedupeKey: "gaf:1005149",
+    contractor: {
+      name: "American Home Contractors Inc",
+      phone: "(908) 771-0123",
+      website: "https://njahc.com/",
+      address: "124 Crescent Rd",
+      city: "Florham Park",
+      state: "NJ",
+      zipCode: "07932",
+      certificationLevel: "GAF Master Elite",
+    },
+    rawData: {
+      aboutUs: {
+        headline: "About",
+        body:
+          "American Home Contractors is a full service Roofing, Windows, and Siding company. Our commitment to detailed workmanship, quality products and responsive service has helped build our excellent reputation with homeowners in the past 15 years. As one of the leading siding, roofing and windows contractors in New Jersey, we understand that Your Satisfaction Means Everything. Our commitment is on our customer's 100% satisfaction, and will strive to exceed your expectations. Conveniently located in Florham Park NJ, American Home Contractors has become the destination for top-quality window, roofing, and siding solutions for New Jersey homes. Please contact us to schedule a free, in-home consultation and learn more about our superior difference. CALL US AT (908) 771-0123 TO SCHEDULE YOUR FREE CONSULTATION!",
+      },
+      certification: {
+        awards: ["President's Club Award"],
+        programs: ["GAF Master Elite®"],
+      },
+      contractorDetails: {
+        yearsInBusiness: "In business since 2009",
+        contractorId: "1005149",
+        stateLicenseNumber: "13VH05517600",
+      },
+      reviews: {
+        rating: 5,
+        count: 265,
+        summary: "Aggregate rating shown on directory; detailed list may load separately in browser.",
+      },
+      meta: {
+        gafContractorId: "1005149",
+        seedOrigin: "prisma-seed",
+        pageKind: "residential-contractor-detail",
+      },
+    },
+  },
+];
 
 async function main() {
   const now = new Date();
@@ -131,7 +236,53 @@ async function main() {
     });
   }
 
-  console.log(`Seeded ${contractors.length} contractors.`);
+  console.log(`Seeded ${contractors.length} demo contractors.`);
+
+  const gafUrls = GAF_PUBLIC_SEEDS.map((s) => s.sourceUrl);
+  await prisma.rawLeadSource.deleteMany({
+    where: { sourceUrl: { in: gafUrls } },
+  });
+
+  for (const gaf of GAF_PUBLIC_SEEDS) {
+    const contractor = await prisma.contractor.upsert({
+      where: { dedupeKey: gaf.dedupeKey },
+      create: {
+        dedupeKey: gaf.dedupeKey,
+        name: gaf.contractor.name,
+        phone: gaf.contractor.phone,
+        website: gaf.contractor.website,
+        address: gaf.contractor.address,
+        city: gaf.contractor.city,
+        state: gaf.contractor.state,
+        zipCode: gaf.contractor.zipCode,
+        certificationLevel: gaf.contractor.certificationLevel,
+        lastSeenAt: now,
+      },
+      update: {
+        name: gaf.contractor.name,
+        phone: gaf.contractor.phone,
+        website: gaf.contractor.website,
+        address: gaf.contractor.address,
+        city: gaf.contractor.city,
+        state: gaf.contractor.state,
+        zipCode: gaf.contractor.zipCode,
+        certificationLevel: gaf.contractor.certificationLevel,
+        lastSeenAt: now,
+      },
+    });
+
+    await prisma.rawLeadSource.create({
+      data: {
+        sourceName: "GAF",
+        sourceUrl: gaf.sourceUrl,
+        rawData: gaf.rawData as InputJsonValue,
+        scrapedAt: now,
+        contractorId: contractor.id,
+      },
+    });
+  }
+
+  console.log(`Seeded ${GAF_PUBLIC_SEEDS.length} GAF RawLeadSource rows + linked contractors.`);
 }
 
 main()
