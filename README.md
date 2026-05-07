@@ -8,6 +8,7 @@ Detailed checklist: [TODO.md](./TODO.md).
 
 - Next.js 16, TypeScript, Tailwind
 - Prisma 5 + PostgreSQL
+- **Hour 2:** `openai`, `zod` (structured insights)
 - Dedupe: unique `dedupeKey` (seed/demo uses `seed:zip:slug:suffix`; Hour 3 will align with normalized scrape keys)
 
 ## GAF raw payload (scheme A)
@@ -28,9 +29,9 @@ Detailed checklist: [TODO.md](./TODO.md).
 
    ```bash
    cp .env.example .env
-   # Set DATABASE_URL, e.g.:
-   # DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/sales_ai?schema=public"
    ```
+
+   Set **`DATABASE_URL`** for your Postgres user. For **Hour 2 insights**, set **`OPENAI_API_KEY`** (see [.env.example](./.env.example)). Optional: **`OPENAI_MODEL`**, **`INSIGHT_PROMPT_VERSION`** (defaults are applied in code when unset).
 
 3. **Migrate & seed**
 
