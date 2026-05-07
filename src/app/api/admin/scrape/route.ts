@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 
+import {
+  adminMutationsConfigError,
+  isAdminMutationAuthorized,
+} from "@/lib/admin-request-auth";
 import { batchGenerateLeadInsightsForContractorIds } from "@/lib/batch-generate-lead-insights";
 import { prisma } from "@/lib/prisma";
 import { runGafCoveoResidentialScrape } from "@/lib/scrape/run-gaf-scrape";
@@ -14,40 +18,15 @@ type ScrapeBody = {
   insightDelayMs?: number;
 };
 
-/** Production requires `SCRAPE_ADMIN_SECRET`; dev can omit. */
-function adminScrapeConfigError(): NextResponse | null {
-  const secret = process.env.SCRAPE_ADMIN_SECRET?.trim();
-  if (!secret) {
-    if (process.env.NODE_ENV === "production") {
-      return NextResponse.json(
-        { error: "SCRAPE_ADMIN_SECRET is not configured", code: "ADMIN_NOT_CONFIGURED" },
-        { status: 503 },
-      );
-    }
-    return null;
-  }
-
-  return null;
-}
-
-function isAuthorized(request: Request): boolean {
-  const secret = process.env.SCRAPE_ADMIN_SECRET?.trim();
-  if (!secret) {
-    return process.env.NODE_ENV !== "production";
-  }
-  const header = request.headers.get("x-admin-scrape-secret")?.trim();
-  return header === secret;
-}
-
 /**
  * POST /api/admin/scrape — demo-only: Coveo list → upsert contractors (+ optional batched OpenAI insights).
  * Guard with `SCRAPE_ADMIN_SECRET` + header `x-admin-scrape-secret` in production; dev allows unset secret.
  */
 export async function POST(request: Request) {
-  const gate = adminScrapeConfigError();
+  const gate = adminMutationsConfigError();
   if (gate) return gate;
 
-  if (!isAuthorized(request)) {
+  if (!isAdminMutationAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized", code: "UNAUTHORIZED" }, { status: 401 });
   }
 

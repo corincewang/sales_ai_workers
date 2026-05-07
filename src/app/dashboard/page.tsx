@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type UIEvent } from "react";
+
+import { warmBatchInsights } from "./actions";
+
+const PAGE_SIZE = 20;
+const WARM_FIRST = 10;
+const SCROLL_NEAR_BOTTOM_PX = 80;
 
 type ContractorListItem = {
   id: string;
@@ -11,6 +17,8 @@ type ContractorListItem = {
   zipCode: string;
   certificationLevel: string | null;
 };
+
+type ListMeta = { skip: number; limit: number; total: number; hasMore: boolean };
 
 type LeadInsightDto = {
   id: string;
@@ -39,11 +47,50 @@ function asStringList(v: unknown): string[] {
   return v.filter((x): x is string => typeof x === "string");
 }
 
+function buildListParams(
+  zip: string,
+  excludeSeed: boolean,
+  skip: number,
+): URLSearchParams {
+  const params = new URLSearchParams();
+  params.set("limit", String(PAGE_SIZE));
+  params.set("skip", String(skip));
+  if (zip.trim()) params.set("zip", zip.trim());
+  if (excludeSeed) params.set("excludeSeed", "true");
+  return params;
+}
+
+/** Avoid `res.json()` on HTML error pages (returns clearer errors in dev). */
+async function parseApiJson<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.includes("application/json")) {
+    const snippet = text.replace(/\s+/g, " ").trim().slice(0, 220);
+    throw new Error(
+      !res.ok
+        ? `HTTP ${res.status} (${snippet || res.statusText})`
+        : `Expected JSON, got: ${snippet}`,
+    );
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(
+      `Invalid JSON (HTTP ${res.status}): ${text.replace(/\s+/g, " ").trim().slice(0, 160)}`,
+    );
+  }
+}
+
 export default function DashboardPage() {
-  const [zip, setZip] = useState("10013");
+  /** Empty = all ZIPs. Scraped Coveo rows often are not ZIP 10013 even when search is centered there. */
+  const [zip, setZip] = useState("");
+  const [excludeSeed, setExcludeSeed] = useState(true);
   const [list, setList] = useState<ContractorListItem[]>([]);
+  const [listMeta, setListMeta] = useState<ListMeta | null>(null);
   const [listLoading, setListLoading] = useState(true);
+  const [listLoadingMore, setListLoadingMore] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
+  const [warmStatus, setWarmStatus] = useState<string | null>(null);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ContractorDetail | null>(null);
@@ -53,23 +100,10 @@ export default function DashboardPage() {
   const [generateLoading, setGenerateLoading] = useState(false);
   const [generateMessage, setGenerateMessage] = useState<string | null>(null);
 
-  const loadList = useCallback(async () => {
-    setListLoading(true);
-    setListError(null);
-    setSelectedId(null);
-    setDetail(null);
-    try {
-      const res = await fetch(`/api/contractors?zip=${encodeURIComponent(zip)}`);
-      const json = (await res.json()) as { data?: ContractorListItem[]; error?: string };
-      if (!res.ok) throw new Error(json.error ?? res.statusText);
-      setList(json.data ?? []);
-    } catch (e) {
-      setListError(e instanceof Error ? e.message : "Failed to load contractors");
-      setList([]);
-    } finally {
-      setListLoading(false);
-    }
-  }, [zip]);
+  /** Prevents duplicate next-page fetches when scroll fires repeatedly before React re-renders. */
+  const loadMoreLockedRef = useRef(false);
+  const selectedIdRef = useRef<string | null>(null);
+  selectedIdRef.current = selectedId;
 
   const loadDetail = useCallback(async (id: string) => {
     setDetailLoading(true);
@@ -79,7 +113,7 @@ export default function DashboardPage() {
       const res = await fetch(
         `/api/contractors/${encodeURIComponent(id)}?include=latestInsight`,
       );
-      const json = (await res.json()) as { data?: ContractorDetail; error?: string };
+      const json = await parseApiJson<{ data?: ContractorDetail; error?: string }>(res);
       if (!res.ok) throw new Error(json.error ?? res.statusText);
       setDetail(json.data ?? null);
     } catch (e) {
@@ -90,14 +124,102 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const reloadList = useCallback(async () => {
+    loadMoreLockedRef.current = false;
+    setListLoading(true);
+    setListLoadingMore(false);
+    setListError(null);
+    setSelectedId(null);
+    setDetail(null);
+    setWarmStatus(null);
+    setListMeta(null);
+    try {
+      const params = buildListParams(zip, excludeSeed, 0);
+      const res = await fetch(`/api/contractors?${params}`);
+      const json = await parseApiJson<{
+        data?: ContractorListItem[];
+        meta?: ListMeta;
+        error?: string;
+      }>(res);
+      if (!res.ok) throw new Error(json.error ?? res.statusText);
+      const rows = json.data ?? [];
+      setList(rows);
+      setListMeta(
+        json.meta ?? {
+          skip: 0,
+          limit: PAGE_SIZE,
+          total: rows.length,
+          hasMore: false,
+        },
+      );
+
+      const warmIds = rows.slice(0, WARM_FIRST).map((c) => c.id);
+      if (warmIds.length > 0) {
+        setWarmStatus("Pre-generating insights for first 10 leads (server)…");
+        void warmBatchInsights(warmIds).then((r) => {
+            if (!r.ok) {
+              setWarmStatus(`Insight warm-up failed: ${r.error}`);
+              return;
+            }
+            setWarmStatus(
+              `Insight warm-up: ${r.summary.ok} generated, ${r.summary.skipped} already had, ${r.summary.error} errors.`,
+            );
+            const sid = selectedIdRef.current;
+            if (sid && warmIds.includes(sid)) void loadDetail(sid);
+          });
+      }
+    } catch (e) {
+      setListError(e instanceof Error ? e.message : "Failed to load contractors");
+      setList([]);
+      setListMeta(null);
+    } finally {
+      setListLoading(false);
+    }
+  }, [zip, excludeSeed, loadDetail]);
+
+  const loadMore = useCallback(async () => {
+    if (listLoading || listLoadingMore || !listMeta?.hasMore || loadMoreLockedRef.current) {
+      return;
+    }
+    loadMoreLockedRef.current = true;
+    setListLoadingMore(true);
+    setListError(null);
+    try {
+      const nextSkip = list.length;
+      const params = buildListParams(zip, excludeSeed, nextSkip);
+      const res = await fetch(`/api/contractors?${params}`);
+      const json = await parseApiJson<{
+        data?: ContractorListItem[];
+        meta?: ListMeta;
+        error?: string;
+      }>(res);
+      if (!res.ok) throw new Error(json.error ?? res.statusText);
+      const chunk = json.data ?? [];
+      setList((prev) => [...prev, ...chunk]);
+      if (json.meta) setListMeta(json.meta);
+    } catch (e) {
+      setListError(e instanceof Error ? e.message : "Failed to load more");
+    } finally {
+      loadMoreLockedRef.current = false;
+      setListLoadingMore(false);
+    }
+  }, [zip, excludeSeed, list.length, listLoading, listLoadingMore, listMeta?.hasMore]);
+
   useEffect(() => {
-    void loadList();
-  }, [loadList]);
+    void reloadList();
+  }, [reloadList]);
 
   useEffect(() => {
     if (selectedId) void loadDetail(selectedId);
     else setDetail(null);
   }, [selectedId, loadDetail]);
+
+  function handleListScroll(e: UIEvent<HTMLUListElement>) {
+    const el = e.currentTarget;
+    const nearBottom =
+      el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_NEAR_BOTTOM_PX;
+    if (nearBottom) void loadMore();
+  }
 
   async function handleGenerate() {
     if (!selectedId) return;
@@ -107,7 +229,7 @@ export default function DashboardPage() {
       const res = await fetch(`/api/contractors/${encodeURIComponent(selectedId)}/insights`, {
         method: "POST",
       });
-      const json = (await res.json()) as { error?: string; code?: string; data?: { id: string } };
+      const json = await parseApiJson<{ error?: string; code?: string; data?: { id: string } }>(res);
       if (!res.ok) {
         setGenerateMessage(json.error ?? `${json.code ?? "error"} (${res.status})`);
         return;
@@ -145,33 +267,65 @@ export default function DashboardPage() {
         <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-zinc-500">ZIP</span>
+              <span className="text-zinc-500">ZIP (optional)</span>
               <input
                 value={zip}
                 onChange={(e) => setZip(e.target.value)}
+                placeholder="All"
                 className="w-28 rounded border border-zinc-300 px-2 py-1.5 dark:border-zinc-600 dark:bg-zinc-950"
               />
             </label>
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+              <input
+                type="checkbox"
+                checked={excludeSeed}
+                onChange={(e) => setExcludeSeed(e.target.checked)}
+                className="rounded border-zinc-300 dark:border-zinc-600"
+              />
+              Hide demo seed rows
+            </label>
             <button
               type="button"
-              onClick={() => void loadList()}
+              onClick={() => void reloadList()}
               className="rounded bg-zinc-900 px-3 py-1.5 text-sm text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
             >
               Load list
             </button>
           </div>
+          <p className="mt-2 text-xs text-zinc-500">
+            Paginated ({PAGE_SIZE}/page). Scroll the list to preload the next page. First {WARM_FIRST} leads
+            kick off server insight generation after the initial load.
+          </p>
+          <p className="mt-1 text-xs text-zinc-500">
+            Scraped contractors use their listing postal code (often outside 10013). Leave ZIP blank for all
+            Coveo imports; use the checkbox to drop prisma seed fictitious leads.
+          </p>
 
           {listError && (
             <p className="mt-3 text-sm text-red-600 dark:text-red-400">{listError}</p>
+          )}
+          {warmStatus && (
+            <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-400">{warmStatus}</p>
           )}
           {listLoading && (
             <p className="mt-3 text-sm text-zinc-500">Loading contractors…</p>
           )}
 
+          {!listLoading && !listError && listMeta && (
+            <p className="mt-3 text-xs text-zinc-500">
+              Showing {list.length} of {listMeta.total}
+              {listMeta.hasMore ? " · scroll for more" : ""}
+              {listLoadingMore ? " · loading…" : ""}
+            </p>
+          )}
+
           {!listLoading && !listError && (
-            <ul className="mt-4 max-h-[min(60vh,480px)] divide-y divide-zinc-200 overflow-y-auto dark:divide-zinc-800">
+            <ul
+              className="mt-2 max-h-[min(60vh,480px)] divide-y divide-zinc-200 overflow-y-auto dark:divide-zinc-800"
+              onScroll={handleListScroll}
+            >
               {list.length === 0 && (
-                <li className="py-3 text-sm text-zinc-500">No contractors for this ZIP.</li>
+                <li className="py-3 text-sm text-zinc-500">No contractors match filters.</li>
               )}
               {list.map((c) => (
                 <li key={c.id}>
